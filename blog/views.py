@@ -48,6 +48,7 @@ def index(request):
         'page_posts': [serialize_post(post) for post in most_fresh_posts],
         'popular_tags': [serialize_tag(tag) for tag in most_popular_tags],
     }
+
     return render(request, 'index.html', context)
 
 
