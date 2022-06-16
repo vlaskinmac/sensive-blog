@@ -10,17 +10,19 @@ def get_related_posts_count():
 
 
 def get_likes_count():
-    posts = Post.objects.prefetch_related('author').annotate(quantity_likes=Count('likes'))
-    popular_posts = list(posts.order_by('-quantity_likes'))[:5]
+    popular_posts = Post.objects.prefetch_related('author').annotate(
+        quantity_likes=Count('likes', distinct=True),
+        quantity_comments=Count('comments', distinct=True)).order_by('-quantity_likes')[:5]
     return popular_posts
 
 
 def serialize_post(post):
+
     return {
         'title': post.title,
         'teaser_text': post.text[:200],
         'author': post.author.username,
-        'comments_amount': len(Comment.objects.filter(post=post)),
+        'comments_amount': post.comments,
         'image_url': post.image.url if post.image else None,
         'published_at': post.published_at,
         'slug': post.slug,
@@ -52,7 +54,7 @@ def index(request):
 
 
 def post_detail(request, slug):
-    post = Post.objects.get(slug=slug)
+    post = Post.objects.prefetch_related('author').get(slug=slug)
     comments = Comment.objects.filter(post=post)
     serialized_comments = []
     for comment in comments:
