@@ -10,10 +10,26 @@ def get_related_posts_count():
 
 
 def get_likes_count():
+    # popular_posts = Post.objects.prefetch_related('author').annotate(
+    #     quantity_likes=Count('likes', distinct=True),
+    #     quantity_comments=Count('comments', distinct=True)).order_by('-quantity_likes')[:5]
     popular_posts = Post.objects.prefetch_related('author').annotate(
-        quantity_likes=Count('likes', distinct=True),
-        quantity_comments=Count('comments', distinct=True)).order_by('-quantity_likes')[:5]
-    return popular_posts
+        quantity_likes=Count('likes')).order_by('-quantity_likes')[:5]
+    popular_posts_ids = [post.id for post in popular_posts]
+
+    posts_with_comments = Post.objects.prefetch_related('author').filter(
+        id__in=popular_posts_ids).annotate(quantity_comments=Count('comments'))
+
+    # ids_and_comments = posts_with_comments.values_list('id', 'quantity_comments')
+    # count_for_id = dict(ids_and_comments)
+    # print(count_for_id)
+    # for post in popular_posts:
+    #     post.quantity_comments = count_for_id[post.id]
+
+    #     print(post.quantity_comments)
+
+    # return posts_with_comments
+    return posts_with_comments
 
 
 def serialize_post(post):
@@ -45,8 +61,7 @@ def index(request):
     most_popular_tags = get_related_posts_count()
     context = {
         'most_popular_posts': [
-            serialize_post(post) for post in most_popular_posts
-        ],
+            serialize_post(post) for post in most_popular_posts],
         'page_posts': [serialize_post(post) for post in most_fresh_posts],
         'popular_tags': [serialize_tag(tag) for tag in most_popular_tags],
     }
@@ -58,11 +73,13 @@ def post_detail(request, slug):
     comments = Comment.objects.filter(post=post)
     serialized_comments = []
     for comment in comments:
-        serialized_comments.append({
+        serialized_comments.append(
+            {
             'text': comment.text,
             'published_at': comment.published_at,
             'author': comment.author.username,
-        })
+        }
+        )
 
     likes = post.likes.all()
     related_tags = post.tags.all()
