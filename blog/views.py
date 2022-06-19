@@ -10,25 +10,13 @@ def get_related_posts_count():
 
 
 def get_likes_count():
-    # popular_posts = Post.objects.prefetch_related('author').annotate(
-    #     quantity_likes=Count('likes', distinct=True),
-    #     quantity_comments=Count('comments', distinct=True)).order_by('-quantity_likes')[:5]
+
     popular_posts = Post.objects.prefetch_related('author').annotate(
         quantity_likes=Count('likes')).order_by('-quantity_likes')[:5]
     popular_posts_ids = [post.id for post in popular_posts]
 
     posts_with_comments = Post.objects.prefetch_related('author').filter(
         id__in=popular_posts_ids).annotate(quantity_comments=Count('comments'))
-
-    # ids_and_comments = posts_with_comments.values_list('id', 'quantity_comments')
-    # count_for_id = dict(ids_and_comments)
-    # print(count_for_id)
-    # for post in popular_posts:
-    #     post.quantity_comments = count_for_id[post.id]
-
-    #     print(post.quantity_comments)
-
-    # return posts_with_comments
     return posts_with_comments
 
 
@@ -58,7 +46,7 @@ def index(request):
     most_popular_posts = get_likes_count()
     fresh_posts = Post.objects.prefetch_related('author').order_by('published_at')
     most_fresh_posts = list(fresh_posts)[-5:]
-    most_popular_tags = get_related_posts_count()
+    most_popular_tags = Tag.objects.popular()[:5]
     context = {
         'most_popular_posts': [
             serialize_post(post) for post in most_popular_posts],
@@ -96,7 +84,7 @@ def post_detail(request, slug):
         'tags': [serialize_tag(tag) for tag in related_tags],
     }
 
-    most_popular_tags = get_related_posts_count()
+    most_popular_tags = Tag.objects.popular()[:5]
     most_popular_posts = get_likes_count()
     context = {
         'post': serialized_post,
@@ -111,7 +99,8 @@ def post_detail(request, slug):
 def tag_filter(request, tag_title):
     tag = Tag.objects.get(title=tag_title)
     related_posts = tag.posts.all()[:20]
-    most_popular_tags = get_related_posts_count()
+
+    most_popular_tags = Tag.objects.popular()[:5]
     most_popular_posts = get_likes_count()
 
     context = {
