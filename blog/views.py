@@ -1,16 +1,8 @@
-from django.db.models import Count
 from django.shortcuts import render
 from blog.models import Comment, Post, Tag
 
 
 def get_likes_count():
-
-    # popular_posts = Post.objects.prefetch_related('author').annotate(
-    #     quantity_likes=Count('likes')).order_by('-quantity_likes')[:5]
-    # popular_posts_ids = [post.id for post in popular_posts]
-    #
-    # posts_with_comments = Post.objects.prefetch_related('author').filter(
-    #     id__in=popular_posts_ids).annotate(quantity_comments=Count('comments'))
     posts_with_comments = Post.objects.popular() \
         .prefetch_related('author')[:5] \
         .fetch_with_comments_count()
