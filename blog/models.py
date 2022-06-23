@@ -10,6 +10,18 @@ class PostQuerySet(models.QuerySet):
         posts_at_year = self.filter(published_at__year=year).order_by('published_at')
         return posts_at_year
 
+    def popular(self):
+        popular_posts = Post.objects.prefetch_related('author').annotate(
+            quantity_likes=Count('likes')).order_by('-quantity_likes')[:5]
+        return popular_posts
+
+    def fetch_with_comments_count(self):
+        popular_posts = self.popular()
+        popular_posts_ids = [post.id for post in popular_posts]
+        posts_with_comments = Post.objects.prefetch_related('author').filter(
+            id__in=popular_posts_ids).annotate(quantity_comments=Count('comments'))
+        return posts_with_comments
+
 
 class Post(models.Model):
     title = models.CharField('Заголовок', max_length=200)
@@ -48,7 +60,7 @@ class Post(models.Model):
 
 class TagQuerySet(models.QuerySet):
 
-    def popular(self):
+    def popular_tags(self):
         popular_tags = self.prefetch_related('posts').annotate(quantity_posts=Count('posts')).order_by('-quantity_posts')
         return popular_tags
 
