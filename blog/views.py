@@ -1,10 +1,12 @@
 from django.shortcuts import render
 from blog.models import Comment, Post, Tag
+from django.db.models import Count, Prefetch
 
 
 def get_likes_count():
-    posts_with_comments = Post.objects.popular() \
-        .prefetch_related('author')[:5] \
+    posts_with_comments = Post.objects.popular()\
+        .prefetch_related('tags')\
+        .prefetch_related('author')\
         .fetch_with_comments_count()
     return posts_with_comments
 
@@ -27,26 +29,39 @@ def serialize_post(post):
 def serialize_tag(tag):
     return {
         'title': tag.title,
-        'posts_with_tag': Post.objects.filter(tags=tag).count(),
+    }
+
+
+def serialize_tag_index(tag):
+    return {
+        'title': tag.title,
+        'posts_with_tag': tag.posts__count,
     }
 
 
 def index(request):
-    most_popular_posts = get_likes_count().prefetch_related('tags')
-    fresh_posts = Post.objects.prefetch_related('author').order_by('published_at')
+    most_popular_posts = get_likes_count()\
+        .prefetch_related(Prefetch('tags', queryset=Tag.objects.annotate(Count('posts'))))
+
+    fresh_posts = Post.objects.annotate(comments_count=Count('comments')).order_by('published_at')[:5]\
+        .prefetch_related(Prefetch('tags', queryset=Tag.objects.annotate(Count('posts'))))\
+        .prefetch_related('author')
+
     most_fresh_posts = list(fresh_posts)[-5:]
-    most_popular_tags = Tag.objects.popular_tags()[:5]
+
+    most_popular_tags = Tag.objects.popular_tags()[:5].annotate(Count('posts'))
+
     context = {
         'most_popular_posts': [
             serialize_post(post) for post in most_popular_posts],
         'page_posts': [serialize_post(post) for post in most_fresh_posts],
-        'popular_tags': [serialize_tag(tag) for tag in most_popular_tags],
+        'popular_tags': [serialize_tag_index(tag) for tag in most_popular_tags],
     }
     return render(request, 'index.html', context)
 
 
 def post_detail(request, slug):
-    post = Post.objects.prefetch_related('author').get(slug=slug)
+    post = Post.objects.prefetch_related('tags').get(slug=slug)
     comments = Comment.objects.filter(post=post)
     serialized_comments = []
     for comment in comments:
