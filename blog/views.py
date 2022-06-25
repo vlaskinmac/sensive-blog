@@ -6,9 +6,17 @@ from django.db.models import Count, Prefetch
 def get_likes_count():
     posts_with_comments = Post.objects.popular()\
         .prefetch_related('tags')\
-        .prefetch_related('author')\
+        .prefetch_related('author')[:5]\
         .fetch_with_comments_count()
     return posts_with_comments
+
+
+def get_most_popular_posts(limit):
+    return Post.objects \
+        .popular()[:limit] \
+        .prefetch_related('author') \
+        .prefetch_related(Prefetch('tags', queryset=Tag.objects.annotate(Count('posts')))) \
+        .fetch_with_comments_count()
 
 
 def serialize_post(post):
@@ -17,6 +25,7 @@ def serialize_post(post):
         'title': post.title,
         'teaser_text': post.text[:200],
         'author': post.author.username,
+        # TODO не понимаю почему здесь нельзя применить post.comments__count
         'comments_amount': post.comments,
         'image_url': post.image.url if post.image else None,
         'published_at': post.published_at,
@@ -31,6 +40,8 @@ def serialize_tag(tag):
         'title': tag.title,
     }
 
+ # TODO не понимаю почему нельзя эту функцию применить везде в других местах не видит posts__count
+ # TODO  Приходится держать serialize_tag(tag)
 
 def serialize_tag_index(tag):
     return {
@@ -40,14 +51,13 @@ def serialize_tag_index(tag):
 
 
 def index(request):
-    most_popular_posts = get_likes_count()\
-        .prefetch_related(Prefetch('tags', queryset=Tag.objects.annotate(Count('posts'))))
+    most_popular_posts = get_most_popular_posts(5)
 
-    fresh_posts = Post.objects.annotate(comments_count=Count('comments')).order_by('published_at')[:5]\
+    fresh_posts = Post.objects.annotate(comments_count=Count('comments')).order_by('-published_at')[:5]\
         .prefetch_related(Prefetch('tags', queryset=Tag.objects.annotate(Count('posts'))))\
         .prefetch_related('author')
 
-    most_fresh_posts = list(fresh_posts)[-5:]
+    most_fresh_posts = list(fresh_posts)
 
     most_popular_tags = Tag.objects.popular_tags()[:5].annotate(Count('posts'))
 
@@ -61,8 +71,13 @@ def index(request):
 
 
 def post_detail(request, slug):
-    post = Post.objects.prefetch_related('tags').get(slug=slug)
-    comments = Comment.objects.filter(post=post)
+    post = Post.objects \
+        .filter(slug=slug) \
+        .annotate(Count('likes')) \
+        .select_related('author') \
+        .prefetch_related(Prefetch('tags', queryset=Tag.objects.annotate(Count('posts')))) \
+        .get()
+    comments = list(post.comments.select_related('author'))
     serialized_comments = []
     for comment in comments:
         serialized_comments.append(
@@ -73,7 +88,6 @@ def post_detail(request, slug):
         }
         )
 
-    likes = post.likes.all()
     related_tags = post.tags.all()
 
     serialized_post = {
@@ -81,7 +95,7 @@ def post_detail(request, slug):
         'text': post.text,
         'author': post.author.username,
         'comments': serialized_comments,
-        'likes_amount': len(likes),
+        'likes_amount': post.likes__count,
         'image_url': post.image.url if post.image else None,
         'published_at': post.published_at,
         'slug': post.slug,
@@ -103,7 +117,11 @@ def post_detail(request, slug):
 def tag_filter(request, tag_title):
 
     tag = Tag.objects.get(title=tag_title)
-    related_posts = tag.posts.all()[:20]
+    related_posts = tag.posts \
+        .all()[:20] \
+        .prefetch_related(Prefetch('tags', queryset=Tag.objects.annotate(Count('posts')))) \
+        .prefetch_related('author') \
+        .fetch_with_comments_count()
 
     most_popular_tags = Tag.objects.popular_tags()[:5]
     most_popular_posts = get_likes_count()
