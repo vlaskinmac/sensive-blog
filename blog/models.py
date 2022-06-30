@@ -65,9 +65,6 @@ class Post(models.Model):
     def get_absolute_url(self):
         return reverse('post_detail', args={'slug': self.slug})
 
-
-
-
 class Tag(models.Model):
 
     title = models.CharField('Тег', max_length=20, unique=True)
